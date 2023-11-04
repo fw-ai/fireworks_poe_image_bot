@@ -1,6 +1,4 @@
-from fireworks_poe_bot.fw_poe_server_bot import FireworksPoeServerBot
-
-import fireworks.client
+from fireworks_poe_image_bot.fw_poe_server_bot import FireworksPoeImageServerBot
 
 import argparse
 from dataclasses import dataclass
@@ -49,7 +47,7 @@ def main():
         else:
             assert k in ["print_supported_models"], f"Unknown argument {k}"
 
-    bot = FireworksPoeServerBot(args.model, args.environment, "0.0.1")
+    bot = FireworksPoeImageServerBot(args.model, args.environment, "0.0.1")
     app = make_app(bot, allow_without_key=True)
 
     uvicorn.run(

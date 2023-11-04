@@ -1,4 +1,6 @@
+import base64
 import copy
+import io
 from typing import AsyncIterable, Dict, List, Union
 from fastapi_poe import PoeBot
 from sse_starlette.sse import ServerSentEvent
@@ -12,9 +14,9 @@ from fastapi_poe.types import (
     ErrorResponse,
 )
 
-from fireworks.client import ChatCompletion
-from fireworks.client.api import ChatCompletionResponseStreamChoice, ChatMessage
+from fireworks.client.api import ChatMessage
 from fireworks.client.error import InvalidRequestError
+from fireworks.client.image import ImageInference, Answer
 
 from typing import Callable
 from itertools import groupby
@@ -23,19 +25,33 @@ import time
 import os
 
 
-class FireworksPoeServerBot(PoeBot):
+class FireworksPoeImageServerBot(PoeBot):
     def __init__(
         self,
         model: str,
         environment: str,
         server_version: str,
-        completion_async_method: Callable = ChatCompletion.acreate,
     ):
         super().__init__()
         self.model = model
         self.environment = environment
         self.server_version = server_version
-        self.completion_async_method = completion_async_method
+
+        model_atoms = model.split("/")
+        if len(model_atoms) != 4:
+            raise ValueError(
+                f"Expected model name to be in the form accounts/{{modelname}}/models/{{model}}, but got {model}"
+            )
+
+        if model_atoms[0] != "accounts" or model_atoms[2] != "models":
+            raise ValueError(
+                f"Expected model name to be in the form accounts/{{modelname}}/models/{{model}}, but got {model}"
+            )
+
+        self.account = model_atoms[1]
+        self.model = model_atoms[3]
+
+        self.client = ImageInference(account=self.account, model=self.model)
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -135,31 +151,40 @@ class FireworksPoeServerBot(PoeBot):
         log_query = copy.copy(query.dict())
         log_query.update({"query": redacted_msgs})
         try:
-            generated_len = 0
+            # generated_len = 0
             start_t = time.time()
-            async for response in self.completion_async_method(
-                model=self.model,
-                messages=messages,
-                stream=True,
-                request_timeout=600,
-                temperature=query.temperature,
-                stop=query.stop_sequences[:4],
-                max_tokens=4096,  # TODO: make arg
-                prompt_truncate_len=2048,  # TODO: make arg
-                frequency_penalty=0.5,
-            ):
-                # Step 3: Transform the CompletionStreamResponse into PartialResponse format
-                for choice in response.choices:
-                    assert isinstance(choice, ChatCompletionResponseStreamChoice)
-                    if choice.delta.content is None:
-                        continue
 
-                    generated_len += len(choice.delta.content)
-                    yield PartialResponse(
-                        text=choice.delta.content,
-                        raw_response=response,
-                        request_id=response.id,
-                    )
+            # TODO: generalize to support multiple messages
+            assert messages[-1]["role"] == "user"
+            prompt = messages[-1]["content"]
+
+            # TODO: support specifying aspect ratio :)
+
+            answer: Answer = self.client.text_to_image(
+                prompt=prompt,
+                cfg_scale=7,
+                height=1024,
+                width=1024,
+                sampler=None,
+                steps=25,
+                seed=0,
+                safety_check=True,
+                output_image_format="JPG",
+            )
+
+            if answer.finish_reason == "CONTENT_FILTERED":
+                yield self.text_event(text="Potentially sensitive content detected")
+
+            bio = io.BytesIO()
+            answer.image.save(bio, format="JPEG")
+            image_bytes = bio.getvalue()
+            image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+            response_text = f"![image](data:image/jpeg;base64,{image_base64}))"
+            CHUNK_SIZE = 2048
+            for start_idx in range(0, len(response_text), CHUNK_SIZE):
+                end_idx = start_idx + CHUNK_SIZE
+                yield self.text_event(text=response_text[start_idx:end_idx])
+            yield ServerSentEvent(event="done")
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
@@ -168,7 +193,6 @@ class FireworksPoeServerBot(PoeBot):
                     "severity": "INFO",
                     "msg": "Request completed",
                     **log_query,
-                    "generated_len": generated_len,
                     "elapsed_sec": elapsed_sec,
                 }
             )

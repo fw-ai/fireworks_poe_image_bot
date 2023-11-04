@@ -1,6 +1,6 @@
 from typing import List
-from fireworks_poe_bot import (
-    FireworksPoeServerBot,
+from fireworks_poe_image_bot import (
+    FireworksPoeImageServerBot,
 )
 from sse_starlette.sse import ServerSentEvent
 from fastapi_poe.types import (
@@ -19,54 +19,15 @@ from fireworks.client.api import (
 )
 
 
-async def fake_chat_completion_acreate(
-    model, *args, request_timeout=600, stream=False, **kwargs
-):
-    assert len(args) == 0
-    messages = kwargs["messages"]
-
-    expect_user = True
-    last_role = None
-    for i, msg in enumerate(messages):
-        if msg["role"] == "system":
-            assert i == 0, "System message not first message"
-        elif msg["role"] == "user":
-            assert expect_user, "User message not expected"
-            expect_user = False
-        elif msg["role"] == "assistant":
-            assert not expect_user, "Assistant message not expected"
-            expect_user = True
-        last_role = msg["role"]
-
-    assert last_role == "user"
-
-    assert stream
-
-    for resp in ["foo"]:
-        yield ChatCompletionStreamResponse(
-            id="",
-            object="",
-            created=0,
-            model=model,
-            choices=[
-                ChatCompletionResponseStreamChoice(
-                    index=0, delta=DeltaMessage(role="assistant", content=resp)
-                )
-            ],
-        )
-
-
-class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
+class TestFWPoeImageBot(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.model = ""
+        self.model = "accounts/fireworks/models/stable-diffusion-xl-1024-v1-0"
         self.environment = ""
         self.server_version = ""
-        self.completion_async_method = fake_chat_completion_acreate
-        self.bot = FireworksPoeServerBot(
+        self.bot = FireworksPoeImageServerBot(
             self.model,
             self.environment,
             self.server_version,
-            self.completion_async_method,
         )
 
     async def _test_with_query(self, query: List[ProtocolMessage]):
@@ -85,7 +46,7 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
             elif isinstance(resp, PartialResponse):
                 resp_fragments.append(resp.text)
             elif isinstance(resp, ServerSentEvent):
-                assert resp.event == "done"
+                assert resp.event == "done", resp.event
         return "".join(resp_fragments)
 
     async def test_empty_query(self):
@@ -98,7 +59,8 @@ class TestFWPoeBot(unittest.IsolatedAsyncioTestCase):
                 ProtocolMessage(role="user", content="hello"),
             ]
         )
-        self.assertEqual(resp, "foo")
+        # self.assertEqual(resp, "foo")
+        self.assertIn("![image](data:image/jpeg;base64", resp)
 
     async def test_single_req_response(self):
         resp = await self._test_with_query(

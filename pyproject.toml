@@ -3,9 +3,9 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fireworks-poe-bot"
+name = "fireworks-poe-image-bot"
 version = "0.0.1"
-description = "Infrastructure for building poe.com bots based off of fireworks.ai hosted models"
+description = "Infrastructure for building poe.com bots based off of fireworks.ai hosted image generation models"
 authors = [{ name = "James Reed", email = "james@fireworks.ai" }]
 readme = "README.md"
 keywords = ["poe", "bot", "fastapi"]
@@ -25,4 +25,4 @@ dependencies = [
 ]
 
 [project.scripts]
-fireworks_poe_bot = "fireworks_poe_bot.__main__:main"
+fireworks_poe_image_bot = "fireworks_poe_image_bot.__main__:main"

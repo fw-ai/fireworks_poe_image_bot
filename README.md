@@ -1,13 +1,13 @@
-# Fireworks Poe Bot
+# Fireworks Poe Image Generation Bot
 
-This codebase is the underlying implementation of the [Mistral-7B](https://poe.com/fw-mistral-7b) on Poe. This implementation calls into the `accounts/fireworks/models/mistral-7b-instruct-4k` model from [fireworks.ai](https://app.fireworks.ai/). However, this bot implementation is fully general and can be used to create bots that call into other Fireworks models.
+This codebase provides an implementation of a Poe server bot that calls into image generation models on [Fireworks](fireworks.ai).
 
 
 ## Server Arguments
 
 The server has several important arguments:
 
-* `--model` - This flag specifies the model to call into on Fireworks. For example: `accounts/fireworks/models/mistral-7b-instruct-4k`
+* `--model` - This flag specifies the model to call into on Fireworks. For example: `accounts/fireworks/models/stable-diffusion-xl-1024-v1-0`
 * `FIREWORKS_API_KEY` - This environment variable specifies the API key to use to call into Fireworks. API keys can be retrieved from the [Fireworks console](https://app.fireworks.ai/users?tab=apps).
 
 There are several optional arguments that can usually be left as default:
@@ -23,8 +23,7 @@ The bot can be run locally by installing the package and running the module:
 
 ```bash
 $ pip install -e .
-$ FIREWORKS_API_KEY=<your API key> python -m fireworks_poe_bot --model accounts/fireworks/models/mistral-7b-ins
-truct-4k
+$ FIREWORKS_API_KEY=<your API key> python -m fireworks_poe_image_bot --model accounts/fireworks/models/stable-diffusion-xl-1024-v1-0
 INFO:     Started server process [50060]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
@@ -57,7 +56,7 @@ Bot server > Hello! I'm here
 
 ## Testing
 
-Test cases can be found in `test/test_poebot.py`. That file can be invoked directly or with `pytest`. The test file mocks out the Fireworks service -- it is intended for quick iteration of development of the poebot logic itself.
+Test cases can be found in `test/test_image_poebot.py`. That file can be invoked directly or with `pytest`. The test file mocks out the Fireworks service -- it is intended for quick iteration of development of the poebot logic itself.
 
 ## Deployment
 
@@ -68,11 +67,11 @@ As the bot listens on port 80, it can be deployed in many contexts, including th
 From the root of this repository, run:
 
 ```bash
-$ MODEL=accounts/fireworks/models/mistral-7b-instruct-4k FIREWORKS_API_KEY=<your API key> modal deploy fireworks_poe_bot/main_modal.py
+$ MODEL=accounts/fireworks/models/stable-diffusion-xl-1024-v1-0 FIREWORKS_API_KEY=<your API key> modal deploy fireworks_poe_image_bot/main_modal.py
 ✓ Created objects.
 ├── 🔨 Created mount /root/fireworks/public-py/fireworks
 ├── 🔨 Created mount /root/fireworks/py/fireworks
-├── 🔨 Created mount /root/fireworks_poe_bot/fireworks_poe_bot
+├── 🔨 Created mount /root/fireworks_poe_image_bot/fireworks_poe_image_bot
 └── 🔨 Created fastapi_app => https://XXXX--fw-poe-bot-fastapi-app.modal.run
 ✓ App deployed! 🎉
 
