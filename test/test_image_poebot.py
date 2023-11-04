@@ -24,10 +24,12 @@ class TestFWPoeImageBot(unittest.IsolatedAsyncioTestCase):
         self.model = "accounts/fireworks/models/stable-diffusion-xl-1024-v1-0"
         self.environment = ""
         self.server_version = ""
+        self.s3_bucket_name = "fireworks-public-poe-temp-images"
         self.bot = FireworksPoeImageServerBot(
-            self.model,
-            self.environment,
-            self.server_version,
+            model=self.model,
+            environment=self.environment,
+            server_version=self.server_version,
+            s3_bucket_name=self.s3_bucket_name,
         )
 
     async def _test_with_query(self, query: List[ProtocolMessage]):
@@ -60,7 +62,7 @@ class TestFWPoeImageBot(unittest.IsolatedAsyncioTestCase):
             ]
         )
         # self.assertEqual(resp, "foo")
-        self.assertIn("![image](data:image/jpeg;base64", resp)
+        self.assertIn("![image](https://", resp)
 
     async def test_single_req_response(self):
         resp = await self._test_with_query(

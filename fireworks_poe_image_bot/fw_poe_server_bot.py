@@ -22,7 +22,9 @@ from typing import Callable
 from itertools import groupby
 import logging
 import time
-import os
+import boto3
+from PIL import Image
+import uuid
 
 
 class FireworksPoeImageServerBot(PoeBot):
@@ -31,6 +33,7 @@ class FireworksPoeImageServerBot(PoeBot):
         model: str,
         environment: str,
         server_version: str,
+        s3_bucket_name: str,
     ):
         super().__init__()
         self.model = model
@@ -52,6 +55,9 @@ class FireworksPoeImageServerBot(PoeBot):
         self.model = model_atoms[3]
 
         self.client = ImageInference(account=self.account, model=self.model)
+
+        self.s3_client = boto3.client("s3")
+        self.s3_bucket_name = s3_bucket_name
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -171,20 +177,18 @@ class FireworksPoeImageServerBot(PoeBot):
                 safety_check=True,
                 output_image_format="JPG",
             )
+            end_t_inference = time.time()
+            start_t_encode = time.time()
 
             if answer.finish_reason == "CONTENT_FILTERED":
                 yield self.text_event(text="Potentially sensitive content detected")
 
-            bio = io.BytesIO()
-            answer.image.save(bio, format="JPEG")
-            image_bytes = bio.getvalue()
-            image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-            response_text = f"![image](data:image/jpeg;base64,{image_base64}))"
-            CHUNK_SIZE = 2048
-            for start_idx in range(0, len(response_text), CHUNK_SIZE):
-                end_idx = start_idx + CHUNK_SIZE
-                yield self.text_event(text=response_text[start_idx:end_idx])
-            yield ServerSentEvent(event="done")
+            random_uuid = str(uuid.uuid4()).replace("-", "")
+            filename = f"{random_uuid}.jpg"
+            presigned_url = self._upload_image_to_s3_with_ttl(
+                self.s3_bucket_name, filename, answer.image
+            )
+            yield PartialResponse(text=f"![image]({presigned_url})")
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
@@ -194,6 +198,8 @@ class FireworksPoeImageServerBot(PoeBot):
                     "msg": "Request completed",
                     **log_query,
                     "elapsed_sec": elapsed_sec,
+                    "elapsed_sec_inference": end_t_inference - start_t,
+                    "elapsed_sec_upload": end_t - start_t_encode,
                 }
             )
             yield ServerSentEvent(event="done")
@@ -215,6 +221,43 @@ class FireworksPoeImageServerBot(PoeBot):
                 error_type = None
             yield ErrorResponse(allow_retry=False, error_type=error_type, text=str(e))
             return
+
+    # Function to upload a PIL Image to an S3 bucket with a presigned URL
+    def _upload_image_to_s3_with_ttl(
+        self, bucket_name, object_name, image: Image, expiration=600
+    ):
+        """
+        Upload a PIL Image to an S3 bucket with TTL by generating a presigned URL.
+
+        :param bucket_name: String name of the bucket to which the image is uploaded.
+        :param object_name: S3 object name. If not specified then file_name is used.
+        :param image: PIL Image object to be uploaded.
+        :param expiration: Time in seconds for the presigned URL to remain valid.
+        """
+        # In-memory binary streams
+        in_mem_file = io.BytesIO()
+
+        # Save the PIL image to in-memory file as JPEG
+        image.save(in_mem_file, format="JPEG")
+        in_mem_file.seek(0)  # Reset file pointer to the beginning
+
+        # Upload the image to S3
+        # self.s3_client.upload_fileobj(in_mem_file, bucket_name, object_name)
+        self.s3_client.put_object(
+            Bucket=self.s3_bucket_name,
+            Key=object_name,
+            Body=in_mem_file,
+            ContentType="image/jpeg",
+        )
+
+        # Generate a presigned URL for the S3 object
+        url = self.s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket_name, "Key": object_name},
+            ExpiresIn=expiration,
+        )
+
+        return url
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
         """Override this to return non-standard settings."""
