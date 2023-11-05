@@ -1,4 +1,5 @@
 from fireworks_poe_image_bot.fw_poe_server_bot import FireworksPoeImageServerBot
+from fireworks_poe_image_bot.logging import UVICORN_LOGGING_CONFIG
 
 import argparse
 from dataclasses import dataclass
@@ -52,7 +53,8 @@ def main():
         model=args.model,
         environment=args.environment,
         server_version="0.0.1",
-        s3_bucket_name=os.environ["S3_BUCKET_NAME"])
+        gcs_bucket_name=os.environ["GCS_BUCKET_NAME"],
+    )
     app = make_app(bot, allow_without_key=True)
 
     uvicorn.run(
@@ -61,6 +63,7 @@ def main():
         port=server_args.port,
         log_level="info",
         server_header=False,
+        log_config=UVICORN_LOGGING_CONFIG,
     )
 
 

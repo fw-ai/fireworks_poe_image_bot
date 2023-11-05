@@ -22,12 +22,12 @@ from typing import Callable
 from itertools import groupby
 import logging
 import time
-import boto3
 from PIL import Image
 import uuid
 import requests
 import cv2
 import numpy as np
+from google.cloud import storage
 
 
 class FireworksPoeImageServerBot(PoeBot):
@@ -36,7 +36,7 @@ class FireworksPoeImageServerBot(PoeBot):
         model: str,
         environment: str,
         server_version: str,
-        s3_bucket_name: str,
+        gcs_bucket_name: str,
     ):
         super().__init__()
         self.model = model
@@ -59,8 +59,7 @@ class FireworksPoeImageServerBot(PoeBot):
 
         self.client = ImageInference(account=self.account, model=self.model)
 
-        self.s3_client = boto3.client("s3")
-        self.s3_bucket_name = s3_bucket_name
+        self.gcs_bucket_name = gcs_bucket_name
 
     def _log_warn(self, payload: Dict):
         payload = copy.copy(payload)
@@ -216,12 +215,10 @@ class FireworksPoeImageServerBot(PoeBot):
             if answer.finish_reason == "CONTENT_FILTERED":
                 yield self.text_event(text="Potentially sensitive content detected")
 
-            random_uuid = str(uuid.uuid4()).replace("-", "")
-            filename = f"{random_uuid}.jpg"
-            presigned_url = self._upload_image_to_s3_with_ttl(
-                self.s3_bucket_name, filename, answer.image
+            public_image_url = self._upload_image_to_gcs(
+                answer.image, self.gcs_bucket_name
             )
-            yield PartialResponse(text=f"![image]({presigned_url})")
+            yield PartialResponse(text=f"![image]({public_image_url})")
 
             end_t = time.time()
             elapsed_sec = end_t - start_t
@@ -291,6 +288,32 @@ class FireworksPoeImageServerBot(PoeBot):
         )
 
         return url
+
+    def _upload_image_to_gcs(self, image: Image, bucket_name: str):
+        """Uploads a given PIL.Image to a GCS bucket."""
+        # Generate a (statistically) unique filename with a uuid4
+        random_uuid = str(uuid.uuid4()).replace("-", "")
+        filename = f"{random_uuid}.jpg"
+
+        # Initialize the GCS client
+        client = storage.Client()
+        bucket = client.get_bucket(bucket_name)
+
+        # Convert the PIL.Image to bytes
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format="JPEG")
+        img_byte_arr = img_byte_arr.getvalue()
+
+        # Create a new blob (i.e., object) in the bucket and upload the image bytes
+        blob = bucket.blob(filename)
+        blob.upload_from_string(img_byte_arr, content_type=f"image/jpeg")
+
+        blob.make_public()
+
+        # The public URL can be accessed with the `public_url` attribute
+        public_url = blob.public_url
+
+        return public_url
 
     def _download_image(self, image_url):
         # Send an HTTP GET request to the image URL

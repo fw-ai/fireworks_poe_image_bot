@@ -1,4 +1,5 @@
 from fireworks_poe_image_bot.fw_poe_server_bot import FireworksPoeImageServerBot
+import fireworks_poe_image_bot.logging
 
 import fireworks.client
 
@@ -20,7 +21,7 @@ image = (
     Image.debian_slim()
     .pip_install("fastapi-poe==0.0.23")
     .pip_install("fireworks-ai>=0.6.0")
-    .pip_install("boto3")
+    .pip_install("google-cloud-storage")
     .env(
         {
             "FIREWORKS_API_BASE": os.environ.get(
@@ -29,11 +30,8 @@ image = (
             "FIREWORKS_API_KEY": os.environ.get(
                 "FIREWORKS_API_KEY", fireworks.client.api_key
             ),
-            "S3_BUCKET_NAME": os.environ["S3_BUCKET_NAME"],
+            "GCS_BUCKET_NAME": os.environ["GCS_BUCKET_NAME"],
             "ENVIRONMENT": os.environ.get("ENVIRONMENT", ""),
-            "AWS_SECRET_ACCESS_KEY": os.environ["AWS_SECRET_ACCESS_KEY"],
-            "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
-            "AWS_SESSION_TOKEN": os.environ["AWS_SESSION_TOKEN"],
             "MODEL": os.environ["MODEL"],
         }
     )
