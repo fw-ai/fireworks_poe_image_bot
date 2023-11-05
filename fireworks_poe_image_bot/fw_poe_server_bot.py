@@ -25,6 +25,9 @@ import time
 import boto3
 from PIL import Image
 import uuid
+import requests
+import cv2
+import numpy as np
 
 
 class FireworksPoeImageServerBot(PoeBot):
@@ -160,23 +163,53 @@ class FireworksPoeImageServerBot(PoeBot):
             # generated_len = 0
             start_t = time.time()
 
-            # TODO: generalize to support multiple messages
             assert messages[-1]["role"] == "user"
             prompt = messages[-1]["content"]
 
             # TODO: support specifying aspect ratio :)
 
-            answer: Answer = self.client.text_to_image(
-                prompt=prompt,
-                cfg_scale=7,
-                height=1024,
-                width=1024,
-                sampler=None,
-                steps=25,
-                seed=0,
-                safety_check=True,
-                output_image_format="JPG",
-            )
+            control_img_uri = None
+            for messages in reversed(messages[:-1]):
+                if messages["role"] == "assistant" and messages["content"].startswith(
+                    "![image]("
+                ):
+                    control_img_uri = messages["content"][9:-1]
+
+            if control_img_uri is None:
+                answer: Answer = self.client.text_to_image(
+                    prompt=prompt,
+                    cfg_scale=7,
+                    height=1024,
+                    width=1024,
+                    sampler=None,
+                    steps=25,
+                    seed=0,
+                    safety_check=True,
+                    output_image_format="JPG",
+                )
+            else:
+                downloaded_image = self._download_image(control_img_uri)
+
+                # TODO: don't hardcode this
+                min_val, max_val = 100, 200
+                image = cv2.Canny(np.array(downloaded_image), min_val, max_val)
+                image = image[:, :, None]
+                image = np.concatenate([image, image, image], axis=2)
+                image = Image.fromarray(image)
+
+                answer: Answer = self.client.control_net(
+                    control_image=image,
+                    control_net_name="canny",
+                    conditioning_scale=0.5,
+                    prompt=prompt,
+                    cfg_scale=7,
+                    sampler=None,
+                    steps=25,
+                    seed=0,
+                    safety_check=True,
+                    output_image_format="JPG",
+                    # Add additional parameters here as necessary
+                )
             end_t_inference = time.time()
             start_t_encode = time.time()
 
@@ -258,6 +291,23 @@ class FireworksPoeImageServerBot(PoeBot):
         )
 
         return url
+
+    def _download_image(self, image_url):
+        # Send an HTTP GET request to the image URL
+        response = requests.get(image_url)
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Read the image content into an in-memory bytes buffer
+            image_bytes = io.BytesIO(response.content)
+
+            # Use Pillow to open the image from the bytes buffer
+            img = Image.open(image_bytes)
+
+            return img
+        else:
+            # If the request failed, raise an HTTPError with the response
+            response.raise_for_status()
 
     async def get_settings(self, setting: SettingsRequest) -> SettingsResponse:
         """Override this to return non-standard settings."""
