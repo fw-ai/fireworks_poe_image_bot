@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass
 from fastapi_poe import make_app
 import uvicorn
+import os
 
 
 @dataclass
@@ -47,7 +48,11 @@ def main():
         else:
             assert k in ["print_supported_models"], f"Unknown argument {k}"
 
-    bot = FireworksPoeImageServerBot(args.model, args.environment, "0.0.1")
+    bot = FireworksPoeImageServerBot(
+        model=args.model,
+        environment=args.environment,
+        server_version="0.0.1",
+        s3_bucket_name=os.environ["S3_BUCKET_NAME"])
     app = make_app(bot, allow_without_key=True)
 
     uvicorn.run(
