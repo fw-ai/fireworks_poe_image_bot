@@ -1,3 +1,5 @@
+# DEPRECATED: Please use https://github.com/fw-ai/fireworks_poe_bot
+
 # Fireworks Poe Image Generation Bot
 
 This codebase provides an implementation of a Poe server bot that calls into image generation models on [Fireworks](fireworks.ai).
